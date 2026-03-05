@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+import numpy as np
 import pandas as pd
 
 from .normalizer import normalize_value, normalize_series, values_match
@@ -233,6 +234,8 @@ def _fmt(value) -> str:
     """Human-readable representation of a normalised value."""
     if value is None:
         return ""
+    if isinstance(value, float) and np.isnan(value):
+        return ""
     if isinstance(value, pd.Timestamp):
         return value.strftime("%Y-%m-%d")
     return str(value)
@@ -262,12 +265,16 @@ def compare_data(
     client_df["_tag_norm"] = client_df[client_tag_col].apply(normalize_value)
     inform_df["_tag_norm"] = inform_df[inform_tag_col].apply(normalize_value)
 
+    # Drop rows that have no tag number — these must never be compared
+    client_df = client_df[client_df["_tag_norm"].notna()]
+    inform_df = inform_df[inform_df["_tag_norm"].notna()]
+
     # Pre-normalise comparison columns (vectorised for speed)
     for col in matched_headers:
         client_df[f"_n_{col}"] = normalize_series(client_df[col])
         inform_df[f"_n_{col}"] = normalize_series(inform_df[col])
 
-    # Index by normalised tag for O(1) lookup
+    # Index by normalised tag — restrict to comparable tags for O(1) lookup
     client_indexed = client_df[client_df["_tag_norm"].isin(comparable_tags)].set_index("_tag_norm")
     inform_indexed = inform_df[inform_df["_tag_norm"].isin(comparable_tags)].set_index("_tag_norm")
 
