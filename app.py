@@ -312,6 +312,10 @@ def _init_state() -> None:
         "inform_headers":    [],
         "comparison_result": None,
         "comparison_ran":    False,
+        # Configuration gate — only True after the user clicks "Apply Configuration"
+        "config_applied":    False,
+        # Hash of the widget values at last Apply; used to detect stale config
+        "config_key":        "",
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -445,6 +449,8 @@ with st.container(border=True):
                 st.session_state.client_df         = None
                 st.session_state.comparison_result = None
                 st.session_state.comparison_ran    = False
+                st.session_state.config_applied    = False
+                st.session_state.config_key        = ""
             st.success(f"Loaded: **{client_file.name}**")
 
     with col_up_inform:
@@ -462,6 +468,8 @@ with st.container(border=True):
                 st.session_state.inform_df         = None
                 st.session_state.comparison_result = None
                 st.session_state.comparison_ran    = False
+                st.session_state.config_applied    = False
+                st.session_state.config_key        = ""
             st.success(f"Loaded: **{inform_file.name}**")
 
 # ---------------------------------------------------------------------------
@@ -479,6 +487,10 @@ else:
     # =======================================================================
     # SECTION 2 — Sheet selection & row configuration
     # =======================================================================
+
+    # Safe defaults — overwritten below if sheet names load successfully
+    _apply_clicked = False
+    _current_key   = ""
 
     with st.container(border=True):
         _sect_header(2, "fas fa-table-cells-large", "Configure Sheets", "sect-config")
@@ -503,6 +515,10 @@ else:
                   <span class="status-label status-label-green">Green</span> = Header row,
                   <span class="status-label status-label-amber">Amber</span> = Original/New marker row,
                   <span class="status-label status-label-blue">Blue</span> = Data start row.</li>
+              <li>When satisfied with the configuration, click
+                  <strong>Apply Configuration</strong> at the bottom of this section to
+                  load the sheets. Steps 3 onwards will not appear until configuration
+                  has been applied.</li>
             </ul>""",
         )
 
@@ -519,9 +535,8 @@ else:
         except Exception as exc:
             st.error(f"Could not read INFORM file sheets: {exc}")
 
-    if client_sheets is not None and inform_sheets is not None:
+        if client_sheets is not None and inform_sheets is not None:
 
-        with st.container(border=False):
             col_cfg_client, col_cfg_inform = st.columns(2, gap="large")
 
             with col_cfg_client:
@@ -650,47 +665,100 @@ else:
                         except Exception as exc:
                             st.warning(f"Preview unavailable: {exc}")
 
-        # ===================================================================
-        # SECTION 3 — Parse & select tag columns
-        # ===================================================================
-
-        parse_error = False
-        client_df = client_headers = inform_df = inform_headers = None
-
-        try:
-            client_df, client_headers = parse_client_sheet(
-                st.session_state.client_bytes,
-                client_sheet,
-                int(client_header_row),
-                int(client_data_row),
+            # ------------------------------------------------------------------
+            # Detect whether the widget values have changed since the last apply
+            # ------------------------------------------------------------------
+            _current_key = (
+                f"{client_sheet}|{client_header_row}|{client_data_row}|"
+                f"{inform_sheet}|{inform_header_row}|{inform_marker_row}|{inform_data_row}"
             )
-            st.session_state.client_df      = client_df
-            st.session_state.client_headers = client_headers
-        except Exception as exc:
-            st.error(f"Error parsing client sheet: {exc}")
-            with st.expander("Traceback"):
-                st.code(traceback.format_exc())
-            parse_error = True
-
-        try:
-            inform_df, inform_headers = parse_inform_sheet(
-                st.session_state.inform_bytes,
-                inform_sheet,
-                header_row=int(inform_header_row),
-                marker_row=int(inform_marker_row),
-                data_start_row=int(inform_data_row),
+            _config_stale = (
+                st.session_state.config_applied
+                and st.session_state.config_key != _current_key
             )
-            st.session_state.inform_df      = inform_df
-            st.session_state.inform_headers = inform_headers
-        except Exception as exc:
-            st.error(f"Error parsing INFORM sheet: {exc}")
-            with st.expander("Traceback"):
-                st.code(traceback.format_exc())
-            parse_error = True
 
-        if parse_error:
-            st.error("Resolve the parsing errors above before continuing.")
+            if _config_stale:
+                st.warning(
+                    "Configuration has changed since the last apply. "
+                    "Click **Apply Configuration** to reload the sheets with the new settings."
+                )
 
+            # ------------------------------------------------------------------
+            # Apply Configuration button — right-aligned
+            # ------------------------------------------------------------------
+            st.markdown("---")
+            _spacer, _btn_col = st.columns([4, 1])
+            with _btn_col:
+                _apply_clicked = st.button(
+                    "Apply Configuration",
+                    type="primary",
+                    use_container_width=True,
+                    key="btn_apply_config",
+                )
+
+    # -----------------------------------------------------------------------
+    # Parse sheets when Apply is clicked — runs outside the Section 2 border
+    # container so error messages appear below it, not inside it.
+    # -----------------------------------------------------------------------
+    if client_sheets is not None and inform_sheets is not None and _apply_clicked:
+        _parse_error = False
+        with st.spinner("Loading sheets — please wait ..."):
+            try:
+                _client_df, _client_headers = parse_client_sheet(
+                    st.session_state.client_bytes,
+                    client_sheet,
+                    int(client_header_row),
+                    int(client_data_row),
+                )
+                st.session_state.client_df      = _client_df
+                st.session_state.client_headers = _client_headers
+            except Exception as exc:
+                st.error(f"Error parsing client sheet: {exc}")
+                with st.expander("Traceback"):
+                    st.code(traceback.format_exc())
+                _parse_error = True
+
+            try:
+                _inform_df, _inform_headers = parse_inform_sheet(
+                    st.session_state.inform_bytes,
+                    inform_sheet,
+                    header_row=int(inform_header_row),
+                    marker_row=int(inform_marker_row),
+                    data_start_row=int(inform_data_row),
+                )
+                st.session_state.inform_df      = _inform_df
+                st.session_state.inform_headers = _inform_headers
+            except Exception as exc:
+                st.error(f"Error parsing INFORM sheet: {exc}")
+                with st.expander("Traceback"):
+                    st.code(traceback.format_exc())
+                _parse_error = True
+
+        if not _parse_error:
+            st.session_state.config_applied    = True
+            st.session_state.config_key        = _current_key
+            st.session_state.comparison_result = None
+            st.session_state.comparison_ran    = False
+            st.success("Configuration applied. Continue with Step 3 below.")
+
+    # -----------------------------------------------------------------------
+    # Sections 3, 4, 5 — only visible after a successful Apply
+    # -----------------------------------------------------------------------
+    _show_downstream = (
+        client_sheets is not None
+        and inform_sheets is not None
+        and st.session_state.config_applied
+        and st.session_state.config_key == _current_key
+    )
+
+    if _show_downstream:
+        client_df      = st.session_state.client_df
+        client_headers = st.session_state.client_headers
+        inform_df      = st.session_state.inform_df
+        inform_headers = st.session_state.inform_headers
+
+        if client_df is None or inform_df is None:
+            st.error("Sheet data is unavailable. Re-apply configuration.")
         else:
             with st.container(border=True):
                 _sect_header(3, "fas fa-tag", "Select Tag Columns", "sect-tags")
