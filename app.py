@@ -8,7 +8,7 @@ INFORM spreadsheet, performing:
   3. Cell-level data comparison (with type normalisation)
 
 Run with:
-    streamlit run app.py
+    python -m streamlit run app.py
 """
 
 from __future__ import annotations
@@ -28,18 +28,20 @@ from utils.report import generate_comparison_report, generate_tag_issues_report
 
 st.set_page_config(
     page_title="Oceaneering QC Tool",
-    page_icon="🔍",
+    page_icon=":mag:",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
 # ---------------------------------------------------------------------------
-# CSS
+# CSS  (Font Awesome 6 loaded via @import)
 # ---------------------------------------------------------------------------
 
 st.markdown(
     """
     <style>
+    @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css');
+
     /* ---- Global ---- */
     [data-testid="stAppViewContainer"] { background-color: #f5f7fa; }
     h1 { color: #1F4E79; }
@@ -54,10 +56,35 @@ st.markdown(
         margin-bottom: 16px;
         box-shadow: 0 1px 4px rgba(0,0,0,0.08);
         border-left: 4px solid #2E75B6;
+        color: #1a1a1a;
     }
     .qc-card-red   { border-left-color: #dc3545; }
     .qc-card-green { border-left-color: #28a745; }
     .qc-card-amber { border-left-color: #ffc107; }
+
+    /* ---- Instruction callouts ---- */
+    .instruction-box {
+        background: #eef4fb;
+        border: 1px solid #b8d0ea;
+        border-left: 4px solid #2E75B6;
+        border-radius: 6px;
+        padding: 14px 18px;
+        margin-bottom: 18px;
+        color: #1a2a3a;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+    .instruction-box .inst-title {
+        font-weight: 700;
+        color: #1F4E79;
+        margin-bottom: 6px;
+        font-size: 14px;
+    }
+    .instruction-box ul {
+        margin: 6px 0 0 0;
+        padding-left: 20px;
+    }
+    .instruction-box li { margin-bottom: 3px; }
 
     /* ---- Header chips ---- */
     .chip-green {
@@ -78,7 +105,7 @@ st.markdown(
     }
     .chip-amber {
         display: inline-block;
-        background: #fff3cd; color: #856404;
+        background: #fff3cd; color: #5a4000;
         border: 1px solid #ffeeba;
         border-radius: 16px; padding: 3px 12px;
         font-size: 13px; font-weight: 600;
@@ -96,11 +123,11 @@ st.markdown(
         box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     }
     .stat-number { font-size: 2em; font-weight: 700; line-height: 1.1; }
-    .stat-label  { font-size: 12px; color: #666; margin-top: 4px; }
+    .stat-label  { font-size: 12px; color: #444; margin-top: 4px; }
     .stat-green  .stat-number { color: #28a745; }
     .stat-red    .stat-number { color: #dc3545; }
     .stat-blue   .stat-number { color: #2E75B6; }
-    .stat-amber  .stat-number { color: #856404; }
+    .stat-amber  .stat-number { color: #7a5800; }
 
     /* ---- Step badges ---- */
     .step-badge {
@@ -109,6 +136,20 @@ st.markdown(
         display: inline-flex; align-items: center; justify-content: center;
         font-weight: 700; font-size: 14px; margin-right: 8px;
     }
+
+    /* ---- Status labels (replaces colour-dot emojis) ---- */
+    .status-label {
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 4px;
+        margin-right: 6px;
+    }
+    .status-label-green  { background: #d4edda; color: #155724; }
+    .status-label-red    { background: #f8d7da; color: #721c24; }
+    .status-label-amber  { background: #fff3cd; color: #5a4000; }
+    .status-label-blue   { background: #d1ecf1; color: #0c5460; }
 
     /* ---- Dividers ---- */
     .section-divider {
@@ -120,6 +161,13 @@ st.markdown(
     [data-testid="stFileUploader"] {
         border: 2px dashed #2E75B6 !important;
         border-radius: 8px !important;
+    }
+
+    /* ---- Footer ---- */
+    .qc-footer {
+        text-align: center;
+        color: #555;
+        font-size: 12px;
     }
     </style>
     """,
@@ -173,6 +221,17 @@ def _stat_box(number, label: str, colour: str) -> str:
     )
 
 
+def _instruction(title: str, body: str) -> None:
+    """Render a styled instruction/explanation callout."""
+    st.markdown(
+        f'<div class="instruction-box">'
+        f'<div class="inst-title"><i class="fas fa-circle-info"></i>&nbsp;&nbsp;{title}</div>'
+        f'{body}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
 # ---------------------------------------------------------------------------
 # App header
 # ---------------------------------------------------------------------------
@@ -181,12 +240,14 @@ st.markdown(
     """
     <div style="background: linear-gradient(135deg,#1F4E79,#2E75B6);
                 border-radius:10px; padding:24px 32px; margin-bottom:24px;">
-      <h1 style="color:white;margin:0;font-size:1.8em;">
-        🔍 Oceaneering QC Comparison Tool
+      <h1 style="color:white; margin:0; font-size:1.8em;">
+        <i class="fas fa-magnifying-glass-chart" style="margin-right:12px;"></i>
+        Oceaneering QC Comparison Tool
       </h1>
-      <p style="color:#cde; margin:6px 0 0; font-size:14px;">
+      <p style="color:#c8ddf0; margin:8px 0 0; font-size:14px; line-height:1.6;">
         Upload a client Excel sheet and an INFORM spreadsheet to validate tags,
-        match headers, and compare data cell-by-cell.
+        match column headers, and compare data cell-by-cell. Work through each
+        numbered step in sequence to produce a full QC report.
       </p>
     </div>
     """,
@@ -201,6 +262,15 @@ st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 st.markdown(
     '<h2><span class="step-badge">1</span>Upload Files</h2>',
     unsafe_allow_html=True,
+)
+
+_instruction(
+    "How to use this section",
+    """<ul>
+      <li><strong>Client Sheet</strong> — the Excel file supplied by the client containing instrument or equipment data to be quality-checked.</li>
+      <li><strong>INFORM Sheet</strong> — the reference spreadsheet exported from the INFORM system. This is the source of truth against which the client data is compared.</li>
+      <li>Both files must be in <strong>.xlsx</strong> or <strong>.xls</strong> format. Once both files are loaded, the next steps will become available below.</li>
+    </ul>""",
 )
 
 col_up_client, col_up_inform = st.columns(2, gap="large")
@@ -248,7 +318,7 @@ _files_ready = bool(
 )
 
 if not _files_ready:
-    st.info("⬆️  Upload both files above to continue.")
+    st.info("Upload both files above to continue.", icon=None)
 
 else:
     # =======================================================================
@@ -259,6 +329,16 @@ else:
     st.markdown(
         '<h2><span class="step-badge">2</span>Configure Sheets</h2>',
         unsafe_allow_html=True,
+    )
+
+    _instruction(
+        "How to use this section",
+        """<ul>
+          <li><strong>Sheet tab</strong> — select which worksheet within the uploaded file should be used for comparison. Most files contain only one sheet; if yours has multiple, choose the correct one from the dropdown.</li>
+          <li><strong>Header row</strong> — the row number (counting from 1) that contains the column names. For example, if column names appear on row 3 of the spreadsheet, enter 3.</li>
+          <li><strong>Data start row</strong> — the row number where the first actual data record begins. This must be greater than the header row.</li>
+          <li>Use the <strong>Preview</strong> panel to visually verify your row selections before proceeding. The highlighted rows show which row has been identified as the header (green) and where data begins (blue).</li>
+        </ul>""",
     )
 
     # Read sheet names — show errors inline and abort this section if failed
@@ -322,7 +402,11 @@ else:
                         use_container_width=True,
                         height=250,
                     )
-                    st.caption("🟢 Green = header row  |  🔵 Blue = data start row")
+                    st.markdown(
+                        '<span class="status-label status-label-green">Green</span> Header row &nbsp;&nbsp;'
+                        '<span class="status-label status-label-blue">Blue</span> Data start row',
+                        unsafe_allow_html=True,
+                    )
                 except Exception as exc:
                     st.warning(f"Preview unavailable: {exc}")
 
@@ -337,11 +421,11 @@ else:
             )
 
             st.info(
-                "**INFORM fixed format detected:**  \n"
-                "Row 1 → Headers  |  Row 2 → Metadata (skipped)  |  "
-                "Row 3 → Original / New column markers  |  Row 4+ → Data  \n\n"
-                "Only **Original** columns will be extracted for comparison.",
-                icon="ℹ️",
+                "**INFORM fixed format detected.**  \n"
+                "Row 1 — Column headers  |  Row 2 — Metadata (skipped)  |  "
+                "Row 3 — Original / New column markers  |  Row 4 onward — Data records  \n\n"
+                "Only **Original** columns will be extracted for comparison. "
+                "No row configuration is required for the INFORM sheet.",
             )
 
             with st.expander("Preview raw rows (first 8 rows from row 1)", expanded=False):
@@ -351,8 +435,8 @@ else:
                     )
                     st.dataframe(preview_df, use_container_width=True, height=250)
                     st.caption(
-                        "Row 1 = headers | Row 2 = metadata | "
-                        "Row 3 = Original/New markers | Row 4+ = data"
+                        "Row 1 = column headers  |  Row 2 = metadata  |  "
+                        "Row 3 = Original/New markers  |  Row 4 onward = data records"
                     )
                 except Exception as exc:
                     st.warning(f"Preview unavailable: {exc}")
@@ -365,6 +449,16 @@ else:
         st.markdown(
             '<h2><span class="step-badge">3</span>Select Tag Columns</h2>',
             unsafe_allow_html=True,
+        )
+
+        _instruction(
+            "How to use this section",
+            """<ul>
+              <li>The <strong>tag column</strong> is the column that contains unique identifiers for each instrument or piece of equipment — for example, tag numbers such as <code>FT-1001</code> or <code>PT-2045</code>.</li>
+              <li>Select the tag column from the <strong>Client sheet</strong> and the corresponding tag column from the <strong>INFORM sheet</strong>. These columns are used to align rows from both sheets before comparing their values.</li>
+              <li>Rows whose tag values exist in only one sheet will be flagged as issues and excluded from the cell-level comparison. Only tags present in <em>both</em> sheets will be compared.</li>
+              <li>Use the <strong>Preview</strong> panels below to confirm the parsed data looks correct before running the comparison.</li>
+            </ul>""",
         )
 
         parse_error = False
@@ -409,7 +503,7 @@ else:
                     "Tag column — Client sheet",
                     client_headers,
                     key="client_tag_col",
-                    help="The column whose values uniquely identify each instrument / tag.",
+                    help="The column whose values uniquely identify each instrument or tag. Used to match rows between the two sheets.",
                 )
 
             with col_tag_inform:
@@ -417,21 +511,21 @@ else:
                     "Tag column — INFORM sheet (Original columns only)",
                     inform_headers,
                     key="inform_tag_col",
-                    help="The corresponding tag column in the INFORM sheet.",
+                    help="The corresponding tag column in the INFORM sheet. Must contain the same tag identifiers as the client sheet.",
                 )
 
             col_prev_client, col_prev_inform = st.columns(2, gap="large")
 
             with col_prev_client:
                 with st.expander(
-                    f"Preview client data  ({len(client_df):,} rows × {len(client_headers)} columns)",
+                    f"Preview client data  ({len(client_df):,} rows x {len(client_headers)} columns)",
                     expanded=False,
                 ):
                     st.dataframe(client_df.head(20), use_container_width=True, height=300)
 
             with col_prev_inform:
                 with st.expander(
-                    f"Preview INFORM data  ({len(inform_df):,} rows × {len(inform_headers)} columns)",
+                    f"Preview INFORM data  ({len(inform_df):,} rows x {len(inform_headers)} columns)",
                     expanded=False,
                 ):
                     st.dataframe(inform_df.head(20), use_container_width=True, height=300)
@@ -446,8 +540,18 @@ else:
                 unsafe_allow_html=True,
             )
 
+            _instruction(
+                "What the comparison does",
+                """<ul>
+                  <li><strong>Tag validation</strong> — checks that all tag values are unique within each sheet and that every tag is present in both sheets. Duplicates and one-sided tags are reported as issues.</li>
+                  <li><strong>Header matching</strong> — compares column names between the two sheets. Only columns with an exact name match in both sheets will be included in the cell-level comparison.</li>
+                  <li><strong>Cell-level comparison</strong> — for every row/column combination where the tag and header match, the tool compares the values from both sheets. Values are normalised (whitespace trimmed, numeric types reconciled) before comparison to reduce false positives.</li>
+                  <li>Results are displayed in the tabs that appear below. You can also download formatted Excel reports for distribution.</li>
+                </ul>""",
+            )
+
             run_btn = st.button(
-                "▶  Run QC Comparison",
+                "Run QC Comparison",
                 type="primary",
                 use_container_width=False,
             )
@@ -456,7 +560,7 @@ else:
                 st.session_state.comparison_ran    = False
                 st.session_state.comparison_result = None
 
-                with st.spinner("Running comparison — please wait …"):
+                with st.spinner("Running comparison — please wait ..."):
                     try:
                         _result = run_full_comparison(
                             client_df      = client_df,
@@ -513,10 +617,10 @@ else:
                 )
 
                 tab_tags, tab_headers, tab_diff, tab_downloads = st.tabs([
-                    "🏷️  Tag Validation",
-                    "📋  Header Matching",
-                    "🔬  Cell Comparison",
-                    "⬇️  Download Reports",
+                    "Tag Validation",
+                    "Header Matching",
+                    "Cell Comparison",
+                    "Download Reports",
                 ])
 
                 # -----------------------------------------------------------
@@ -525,27 +629,37 @@ else:
 
                 with tab_tags:
 
+                    _instruction(
+                        "About Tag Validation",
+                        """<ul>
+                          <li><strong>Comparable tags</strong> — tag values found in both sheets. Only these tags are included in the cell-level comparison.</li>
+                          <li><strong>Client-only tags</strong> — tags present in the client sheet but absent from INFORM. These rows cannot be compared and are excluded from cell-level results.</li>
+                          <li><strong>INFORM-only tags</strong> — tags present in INFORM but absent from the client sheet. Also excluded from cell-level results.</li>
+                          <li><strong>Duplicate tags</strong> — tag values that appear more than once within a single sheet. These are flagged because row matching would be ambiguous.</li>
+                        </ul>""",
+                    )
+
                     tv_col1, tv_col2, tv_col3 = st.columns(3)
                     with tv_col1:
                         st.metric("Comparable tags", len(tv.comparable_tags))
                     with tv_col2:
                         st.metric(
                             "Client-only tags", len(tv.client_only_tags),
-                            delta=f"⚠ {len(tv.client_only_tags)} not compared"
+                            delta=f"{len(tv.client_only_tags)} not compared"
                                   if tv.client_only_tags else None,
                             delta_color="off",
                         )
                     with tv_col3:
                         st.metric(
                             "INFORM-only tags", len(tv.inform_only_tags),
-                            delta=f"⚠ {len(tv.inform_only_tags)} not compared"
+                            delta=f"{len(tv.inform_only_tags)} not compared"
                                   if tv.inform_only_tags else None,
                             delta_color="off",
                         )
 
                     if not tv.issues:
                         st.success(
-                            "✅  All tags are unique and present in both sheets. "
+                            "All tags are unique and present in both sheets. "
                             "Full comparison is available.",
                         )
                     else:
@@ -556,7 +670,7 @@ else:
 
                         if null_issues:
                             with st.expander(
-                                f"⚠️  Empty / Null Tags ({len(null_issues)} issue(s))",
+                                f"Empty / Null Tags — {len(null_issues)} issue(s)",
                                 expanded=True,
                             ):
                                 null_df = pd.DataFrame(
@@ -566,7 +680,7 @@ else:
 
                         if dup_issues:
                             with st.expander(
-                                f"🔴  Duplicate Tags ({len(dup_issues)} tag(s))", expanded=True
+                                f"Duplicate Tags — {len(dup_issues)} tag(s)", expanded=True
                             ):
                                 dup_df = pd.DataFrame(
                                     [{"Tag": i.tag, "Sheet": i.sheet, "Reason": i.reason}
@@ -587,7 +701,7 @@ else:
 
                             if client_miss:
                                 with st.expander(
-                                    f"🟡  Client-Only Tags ({len(client_miss)}) — no INFORM comparison",
+                                    f"Client-Only Tags — {len(client_miss)} tag(s), no INFORM comparison",
                                     expanded=len(client_miss) <= 50,
                                 ):
                                     cm_df = pd.DataFrame(
@@ -604,7 +718,7 @@ else:
 
                             if inform_miss:
                                 with st.expander(
-                                    f"🟡  INFORM-Only Tags ({len(inform_miss)}) — no client comparison",
+                                    f"INFORM-Only Tags — {len(inform_miss)} tag(s), no client comparison",
                                     expanded=len(inform_miss) <= 50,
                                 ):
                                     im_df = pd.DataFrame(
@@ -621,12 +735,12 @@ else:
 
                         if tv.comparable_tags:
                             st.info(
-                                f"ℹ️  {len(tv.comparable_tags):,} tag(s) are comparable and have "
+                                f"{len(tv.comparable_tags):,} tag(s) are comparable and have "
                                 f"been included in the data comparison below.",
                             )
                         else:
                             st.error(
-                                "🚫  No comparable tags found. Check that the correct tag columns "
+                                "No comparable tags found. Check that the correct tag columns "
                                 "are selected for both sheets.",
                             )
 
@@ -635,6 +749,16 @@ else:
                 # -----------------------------------------------------------
 
                 with tab_headers:
+
+                    _instruction(
+                        "About Header Matching",
+                        """<ul>
+                          <li>Column headers are compared using an <strong>exact string match</strong>. Column names must be identical in both sheets (including spacing and capitalisation) to be included in cell-level comparison.</li>
+                          <li><strong>Matched headers</strong> — columns present in both sheets that will be compared cell-by-cell.</li>
+                          <li><strong>Client-only headers</strong> — columns present in the client sheet but not in INFORM. Their data will not be compared.</li>
+                          <li><strong>INFORM-only headers</strong> — columns present in INFORM but not in the client sheet. Their data will not be compared.</li>
+                        </ul>""",
+                    )
 
                     h_col1, h_col2, h_col3 = st.columns(3)
                     with h_col1:
@@ -645,7 +769,7 @@ else:
                         st.metric("INFORM-only headers", len(hm.inform_only))
 
                     if hm.all_matched:
-                        st.success("✅  All headers match exactly between the two sheets.")
+                        st.success("All headers match exactly between the two sheets.")
                     else:
                         if hm.client_only:
                             st.warning(
@@ -663,7 +787,11 @@ else:
                     hg_col1, hg_col2, hg_col3 = st.columns(3)
 
                     with hg_col1:
-                        st.markdown("**✅ Matched (both sheets)**")
+                        st.markdown(
+                            '<span class="status-label status-label-green">Matched</span> '
+                            '<strong>Present in both sheets</strong>',
+                            unsafe_allow_html=True,
+                        )
                         chips = (
                             "".join(_chip(h, "green") for h in hm.matched)
                             if hm.matched else "<i>None</i>"
@@ -671,7 +799,11 @@ else:
                         st.markdown(chips, unsafe_allow_html=True)
 
                     with hg_col2:
-                        st.markdown("**🟡 Client-only headers**")
+                        st.markdown(
+                            '<span class="status-label status-label-amber">Client only</span> '
+                            '<strong>Not in INFORM</strong>',
+                            unsafe_allow_html=True,
+                        )
                         chips = (
                             "".join(_chip(h, "amber") for h in hm.client_only)
                             if hm.client_only else "<i>None</i>"
@@ -679,7 +811,11 @@ else:
                         st.markdown(chips, unsafe_allow_html=True)
 
                     with hg_col3:
-                        st.markdown("**🟡 INFORM-only headers**")
+                        st.markdown(
+                            '<span class="status-label status-label-amber">INFORM only</span> '
+                            '<strong>Not in client sheet</strong>',
+                            unsafe_allow_html=True,
+                        )
                         chips = (
                             "".join(_chip(h, "amber") for h in hm.inform_only)
                             if hm.inform_only else "<i>None</i>"
@@ -710,6 +846,16 @@ else:
                 # -----------------------------------------------------------
 
                 with tab_diff:
+
+                    _instruction(
+                        "About Cell Comparison",
+                        """<ul>
+                          <li>Each row in this table represents one cell compared between the two sheets, identified by its <strong>Tag</strong> (row identifier) and <strong>Header</strong> (column identifier).</li>
+                          <li><strong>Client Value / INFORM Value</strong> — the raw values as they appear in each file.</li>
+                          <li><strong>Client (Normalised) / INFORM (Normalised)</strong> — values after normalisation (whitespace trimmed, numbers standardised). Comparison is performed on normalised values to reduce false mismatches caused by formatting differences.</li>
+                          <li>Use the <strong>filter controls</strong> to focus on mismatches, a specific column header, or a specific tag. The bar chart at the bottom shows which columns have the most discrepancies.</li>
+                        </ul>""",
+                    )
 
                     if df_all.empty:
                         st.info(
@@ -789,6 +935,10 @@ else:
 
                         if not mm_df.empty:
                             st.markdown("#### Mismatch Count by Header")
+                            st.caption(
+                                "The chart below shows how many mismatches were found in each "
+                                "column. Columns with the highest mismatch count appear first."
+                            )
                             mm_by_hdr = (
                                 mm_df.groupby("Header")
                                 .size()
@@ -803,11 +953,16 @@ else:
 
                 with tab_downloads:
 
-                    st.markdown("### Export Results")
-                    st.markdown(
-                        "Download formatted Excel reports with colour-coded cells for "
-                        "easy review and distribution."
+                    _instruction(
+                        "About the downloadable reports",
+                        """<ul>
+                          <li><strong>Tag Issues Report</strong> — a standalone Excel file listing all tag-level problems: duplicates, tags present in only one sheet, and empty tag values. Use this to identify data quality issues before re-running the comparison.</li>
+                          <li><strong>Full Comparison Report</strong> — a multi-sheet Excel workbook containing: a Summary, Tag Issues, Header Info, Mismatches Only, and All Results. Cells are colour-coded green (match) and red (mismatch) for fast visual review. Share this report with the relevant team for sign-off.</li>
+                          <li><strong>Raw CSV</strong> — the complete comparison dataset in CSV format, suitable for further analysis in Excel, Power BI, or other tools.</li>
+                        </ul>""",
                     )
+
+                    st.markdown("### Export Results")
 
                     dl_col1, dl_col2 = st.columns(2)
 
@@ -815,12 +970,12 @@ else:
                         st.markdown("#### Tag Issues Report")
                         st.markdown(
                             "Lists all duplicate tags, tags present in only one sheet, "
-                            "and any empty tag values."
+                            "and any empty tag values found during validation."
                         )
                         try:
                             issues_xlsx = generate_tag_issues_report(tv.issues_df())
                             st.download_button(
-                                label="⬇️  Download Tag Issues (.xlsx)",
+                                label="Download Tag Issues (.xlsx)",
                                 data=issues_xlsx,
                                 file_name="QC_Tag_Issues.xlsx",
                                 mime=(
@@ -836,12 +991,12 @@ else:
                         st.markdown("#### Full Comparison Report")
                         st.markdown(
                             "Multi-sheet workbook: Summary, Tag Issues, Header Info, "
-                            "Mismatches only, and All Results with green/red cell colouring."
+                            "Mismatches Only, and All Results with green/red cell colouring."
                         )
                         try:
                             full_xlsx = generate_comparison_report(result)
                             st.download_button(
-                                label="⬇️  Download Full Report (.xlsx)",
+                                label="Download Full Report (.xlsx)",
                                 data=full_xlsx,
                                 file_name="QC_Full_Comparison_Report.xlsx",
                                 mime=(
@@ -856,9 +1011,13 @@ else:
                     if not df_all.empty:
                         st.markdown("---")
                         st.markdown("#### Raw Comparison Data (CSV)")
+                        st.markdown(
+                            "Download the complete comparison dataset as a CSV file for use "
+                            "in Excel, Power BI, or other analysis tools."
+                        )
                         csv_data = df_all.to_csv(index=False).encode("utf-8")
                         st.download_button(
-                            label="⬇️  Download as CSV",
+                            label="Download as CSV",
                             data=csv_data,
                             file_name="QC_Comparison_Data.csv",
                             mime="text/csv",
@@ -870,8 +1029,6 @@ else:
 
 st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 st.markdown(
-    '<p style="text-align:center;color:#aaa;font-size:12px;">'
-    "Oceaneering QC Comparison Tool — Internal Use Only"
-    "</p>",
+    '<p class="qc-footer">Oceaneering QC Comparison Tool — Internal Use Only</p>',
     unsafe_allow_html=True,
 )
