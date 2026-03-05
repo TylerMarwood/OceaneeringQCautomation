@@ -343,6 +343,25 @@ def _stat_box(number, label: str, colour: str) -> str:
     )
 
 
+def _styled_dataframe(df: pd.DataFrame, style_fn, **kwargs) -> None:
+    """
+    Render a styled dataframe, raising the Pandas Styler cell limit as needed.
+    Falls back to an unstyled table with an explanatory caption when the dataset
+    is too large to colour-code efficiently (> 1,000,000 cells).
+    """
+    n_cells = df.shape[0] * df.shape[1]
+    if n_cells > 1_000_000:
+        st.dataframe(df, **kwargs)
+        st.caption(
+            f"Row colouring is disabled for this table ({n_cells:,} cells). "
+            "Export the Full Comparison Report for colour-coded results in Excel."
+        )
+        return
+    if n_cells > pd.get_option("styler.render.max_elements"):
+        pd.set_option("styler.render.max_elements", n_cells)
+    st.dataframe(style_fn(df), **kwargs)
+
+
 def _instruction(title: str, body: str) -> None:
     """Render a blue instruction/explanation callout."""
     st.markdown(
@@ -475,12 +494,15 @@ else:
                   enter 3.</li>
               <li><strong>Data start row</strong> — the row number where the first
                   actual data record begins. Must be greater than the header row.</li>
+              <li><strong>Original / New marker row</strong> (INFORM only) — the row
+                  that labels each column as "Original" or "New". Only columns labelled
+                  "Original" are extracted for comparison. Set this to the same value as
+                  the header row to include all columns.</li>
               <li>Use the <strong>Preview</strong> panel inside each column to visually
                   confirm your row selections.
-                  <span class="status-label status-label-green">Green</span> highlights
-                  the header row and
-                  <span class="status-label status-label-blue">Blue</span> highlights
-                  the data start row.</li>
+                  <span class="status-label status-label-green">Green</span> = Header row,
+                  <span class="status-label status-label-amber">Amber</span> = Original/New marker row,
+                  <span class="status-label status-label-blue">Blue</span> = Data start row.</li>
             </ul>""",
         )
 
@@ -565,23 +587,65 @@ else:
                         "Sheet to use", inform_sheets, key="sel_inform_sheet"
                     )
 
-                    st.info(
-                        "**INFORM fixed format detected.**  \n"
-                        "Row 1 — Column headers | Row 2 — Metadata (skipped) | "
-                        "Row 3 — Original / New column markers | Row 4 onward — Data records  \n\n"
-                        "Only **Original** columns are extracted for comparison. "
-                        "No row configuration is required for the INFORM sheet."
+                    i1, i2 = st.columns(2)
+                    with i1:
+                        inform_header_row = st.number_input(
+                            "Header row",
+                            min_value=1, max_value=500, value=1,
+                            key="inform_hrow",
+                            help="Row number (1-indexed) that contains column headers.",
+                        )
+                    with i2:
+                        inform_data_row = st.number_input(
+                            "Data start row",
+                            min_value=2, max_value=500, value=4,
+                            key="inform_drow",
+                            help="Row number (1-indexed) where data records begin.",
+                        )
+
+                    inform_marker_row = st.number_input(
+                        "Original / New marker row",
+                        min_value=1, max_value=500, value=3,
+                        key="inform_mrow",
+                        help=(
+                            "Row that contains the 'Original' / 'New' label for each "
+                            "column. Only columns labelled 'Original' are extracted for "
+                            "comparison. Set to the same value as the header row to "
+                            "disable this filtering and include all columns."
+                        ),
                     )
+
+                    if inform_data_row <= inform_header_row:
+                        st.warning("Data start row must be greater than the header row.")
 
                     with st.expander("Preview raw rows (first 8 rows)", expanded=False):
                         try:
                             preview_df = preview_rows(
                                 st.session_state.inform_bytes, inform_sheet, 1, 8
                             )
-                            st.dataframe(preview_df, use_container_width=True, height=250)
-                            st.caption(
-                                "Row 1 = headers  |  Row 2 = metadata  |  "
-                                "Row 3 = Original/New markers  |  Row 4+ = data"
+
+                            def _hl_inform(row):
+                                if row.name == inform_header_row:
+                                    return ["background-color:#d4edda"] * len(row)
+                                if row.name == inform_marker_row:
+                                    return ["background-color:#fff3cd"] * len(row)
+                                if row.name == inform_data_row:
+                                    return ["background-color:#cce5ff"] * len(row)
+                                return [""] * len(row)
+
+                            st.dataframe(
+                                preview_df.style.apply(_hl_inform, axis=1),
+                                use_container_width=True,
+                                height=250,
+                            )
+                            st.markdown(
+                                '<span class="status-label status-label-green">Green</span>'
+                                ' = Header row&nbsp;&nbsp;'
+                                '<span class="status-label status-label-amber">Amber</span>'
+                                ' = Original/New marker row&nbsp;&nbsp;'
+                                '<span class="status-label status-label-blue">Blue</span>'
+                                ' = Data start row',
+                                unsafe_allow_html=True,
                             )
                         except Exception as exc:
                             st.warning(f"Preview unavailable: {exc}")
@@ -612,6 +676,9 @@ else:
             inform_df, inform_headers = parse_inform_sheet(
                 st.session_state.inform_bytes,
                 inform_sheet,
+                header_row=int(inform_header_row),
+                marker_row=int(inform_marker_row),
+                data_start_row=int(inform_data_row),
             )
             st.session_state.inform_df      = inform_df
             st.session_state.inform_headers = inform_headers
@@ -1140,14 +1207,15 @@ else:
                                     "Match",
                                 ]
 
-                                def _style_diff_table(df: pd.DataFrame):
+                                def _diff_style_fn(df: pd.DataFrame):
                                     def row_style(row):
                                         colour = "#c6efce" if row["Match"] else "#ffc7ce"
                                         return [f"background-color:{colour}"] * len(row)
                                     return df.style.apply(row_style, axis=1)
 
-                                st.dataframe(
-                                    _style_diff_table(view_df[display_cols]),
+                                _styled_dataframe(
+                                    view_df[display_cols],
+                                    _diff_style_fn,
                                     use_container_width=True,
                                     height=500,
                                     hide_index=True,

@@ -2,12 +2,14 @@
 Excel parsing utilities.
 
 Client sheet: fully user-configurable (header row, data start row, tag column).
-INFORM sheet: fixed 3-row header format —
-    Row 1  : Column headers (may use merged cells spanning Original + New column pairs)
-    Row 2  : Unrequired metadata (skipped)
-    Row 3  : "Original" / "New" marker for each physical column
-    Row 4+ : Data rows
-Only columns whose Row-3 marker is "Original" are extracted.
+INFORM sheet: user-configurable rows with the same inputs as the client sheet,
+    plus an additional "Original/New marker row" used to filter only the
+    "Original" columns from the sheet.  Default values match the standard
+    INFORM export format:
+        header_row   = 1  (column names)
+        marker_row   = 3  ("Original" / "New" labels per column)
+        data_start_row = 4  (first data record)
+    Only columns whose marker-row value is "Original" are extracted.
 """
 
 from __future__ import annotations
@@ -60,16 +62,29 @@ def _unique_header(name: str, seen: dict[str, int]) -> str:
 def parse_inform_sheet(
     file_bytes: bytes,
     sheet_name: str,
+    header_row: int = 1,
+    marker_row: int = 3,
+    data_start_row: int = 4,
 ) -> tuple[pd.DataFrame, list[str]]:
     """
-    Parse an INFORM sheet using its fixed 3-row header format.
+    Parse an INFORM sheet with configurable row positions.
+
+    Parameters
+    ----------
+    header_row : int
+        1-indexed row containing column header names.  Default 1.
+    marker_row : int
+        1-indexed row containing "Original" / "New" labels per column.
+        Only columns marked "Original" are extracted.  Default 3.
+    data_start_row : int
+        1-indexed row where data records begin.  Default 4.
 
     Returns
     -------
     df : pd.DataFrame
-        Contains only the "Original" columns, with data from row 4 onwards.
+        Contains only the "Original" columns, starting at data_start_row.
     original_headers : list[str]
-        Ordered list of Original column header names (as they appear in the DataFrame).
+        Ordered list of extracted column header names.
     """
     wb = load_workbook(BytesIO(file_bytes), data_only=True)
     ws = wb[sheet_name]
@@ -81,24 +96,21 @@ def parse_inform_sheet(
 
     max_col = ws.max_column
 
-    # Row 1 → raw header names; Row 3 → Original / New markers
-    headers_row1 = [cell_val(1, c) for c in range(1, max_col + 1)]
-    markers_row3 = [cell_val(3, c) for c in range(1, max_col + 1)]
+    headers    = [cell_val(header_row, c) for c in range(1, max_col + 1)]
+    markers    = [cell_val(marker_row, c) for c in range(1, max_col + 1)]
 
-    # Identify Original columns (0-indexed positions for data slicing)
     original_positions: list[int] = []
     original_headers: list[str] = []
     seen: dict[str, int] = {}
 
-    for i, (hdr, marker) in enumerate(zip(headers_row1, markers_row3)):
+    for i, (hdr, marker) in enumerate(zip(headers, markers)):
         if marker and str(marker).strip().lower() == "original" and hdr is not None:
             clean = _unique_header(str(hdr).strip(), seen)
             original_positions.append(i)
             original_headers.append(clean)
 
-    # Read data from row 4 onwards — only Original column positions
     data: list[list] = []
-    for row_tuple in ws.iter_rows(min_row=4, values_only=True):
+    for row_tuple in ws.iter_rows(min_row=data_start_row, values_only=True):
         row_data = [row_tuple[i] for i in original_positions]
         if any(v is not None for v in row_data):
             data.append(row_data)
