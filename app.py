@@ -426,8 +426,8 @@ with st.container(border=True):
           <li><strong>INFORM Sheet</strong> — the reference spreadsheet exported from
               the INFORM system. This is the source of truth against which the client
               data is compared.</li>
-          <li>Both files must be in <strong>.xlsx</strong> or <strong>.xls</strong>
-              format. Once both files are uploaded the remaining steps will appear
+          <li>Both files must be in <strong>.xlsx</strong> , <strong>.xls</strong> or
+               <strong>.xlsm</strong> format. Once both files are uploaded the remaining steps will appear
               below.</li>
         </ul>""",
     )
