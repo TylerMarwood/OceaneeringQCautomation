@@ -47,10 +47,13 @@ def is_null(value: Any) -> bool:
     """Return True if *value* represents a missing / empty cell."""
     if value is None:
         return True
-    if isinstance(value, float) and np.isnan(value):
-        return True
-    if isinstance(value, pd.Timestamp) and pd.isna(value):
-        return True
+    # pd.isna() catches float NaN, pd.NaT, pd.NA, and numpy NA in one call.
+    # Wrapped in try/except because it can raise on some custom objects.
+    try:
+        if pd.isna(value):
+            return True
+    except (TypeError, ValueError):
+        pass
     if isinstance(value, str) and value.strip().lower() in _NULL_STRINGS:
         return True
     return False

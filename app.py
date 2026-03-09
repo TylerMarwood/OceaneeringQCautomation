@@ -457,7 +457,7 @@ with st.container(border=True):
         st.markdown("#### INFORM Sheet")
         inform_file = st.file_uploader(
             "Upload INFORM Excel file",
-            type=["xlsx", "xls"],
+            type=["xlsx", "xls", "xlsm"],
             key="upload_inform",
             label_visibility="collapsed",
         )
