@@ -438,7 +438,7 @@ with st.container(border=True):
         st.markdown("#### Client Sheet")
         client_file = st.file_uploader(
             "Upload client Excel file",
-            type=["xlsx", "xls"],
+            type=["xlsx", "xls", "xlsm"],
             key="upload_client",
             label_visibility="collapsed",
         )
