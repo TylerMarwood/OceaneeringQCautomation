@@ -40,7 +40,7 @@ if not exist ".venv" (
 )
 
 :: ---- Activate virtual environment ----
-call .venv\Scripts\activate.bat
+call "%~dp0.venv\Scripts\activate.bat"
 
 :: ---- Install / update dependencies on first run ----
 if not exist ".venv\installed.flag" (
