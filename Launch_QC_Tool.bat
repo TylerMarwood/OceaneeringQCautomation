@@ -70,23 +70,15 @@ if %errorlevel% neq 0 (
 echo  [4/5] Virtual environment activated OK.
 echo.
 
-:: ---- Install / update dependencies on first run ----
+:: ---- Install / update dependencies ----
 echo  [5/5] Checking dependencies...
-if exist ".venv\installed.flag" echo  Dependencies already installed, skipping.
-if not exist ".venv\installed.flag" (
-    echo  Installing required packages (this only happens once)...
-    echo  Please wait...
-    echo.
-    pip install -r requirements.txt
-    if %errorlevel% neq 0 (
-        color 0C
-        echo  ERROR: Failed to install packages. Error code: %errorlevel%
-        echo  Check your internet connection and try again.
-        pause
-        exit /b 1
-    )
-    echo. > .venv\installed.flag
-    echo  Packages installed successfully.
+pip install -r requirements.txt --quiet
+if %errorlevel% neq 0 (
+    color 0C
+    echo  ERROR: Failed to install packages. Error code: %errorlevel%
+    echo  Check your internet connection and try again.
+    pause
+    exit /b 1
 )
 echo  [5/5] Dependencies OK.
 echo.
