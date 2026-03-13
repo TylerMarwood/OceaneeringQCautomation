@@ -45,9 +45,8 @@ if not exist ".venv" (
         exit /b 1
     )
     echo  Virtual environment created successfully.
-) else (
-    echo  Virtual environment already exists, skipping.
 )
+if exist ".venv" echo  Virtual environment ready.
 echo  [3/5] Virtual environment OK.
 echo.
 
@@ -73,6 +72,7 @@ echo.
 
 :: ---- Install / update dependencies on first run ----
 echo  [5/5] Checking dependencies...
+if exist ".venv\installed.flag" echo  Dependencies already installed, skipping.
 if not exist ".venv\installed.flag" (
     echo  Installing required packages (this only happens once)...
     echo  Please wait...
@@ -87,8 +87,6 @@ if not exist ".venv\installed.flag" (
     )
     echo. > .venv\installed.flag
     echo  Packages installed successfully.
-) else (
-    echo  Dependencies already installed, skipping.
 )
 echo  [5/5] Dependencies OK.
 echo.
